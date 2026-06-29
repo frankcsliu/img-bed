@@ -1,0 +1,1017 @@
+---
+title: "TSCS2003-2023 跨年度共同題編碼"
+format: html
+editor: visual
+---
+
+## 定義通用讀入函數
+
+> 使用 `file.path()` 組合路徑，可避免手動處理斜線問題，跨平台更穩定。
+
+```{r 通用讀入函數}
+# 定義統一函數：依原始欄名加上 "v" 前綴，使其成為合法 R 變數名，避免 backtick
+add_v_prefix <- function(df) {
+  nms <- names(df)
+  # 若原始變數名稱第一個字元為數字，則加上 "v" 前綴
+  new_nms <- ifelse(grepl("^[0-9]", nms), paste0("v", nms), nms)
+  # 將變數名稱中的小數點替換為下劃線，避免 R 識別字元錯誤
+  new_nms <- gsub("\\.", "_", new_nms)
+  names(df) <- new_nms
+  df
+}
+
+read_and_process_sav <- function(file_path) {
+  raw <- sjlabelled::read_sav(file_path)
+  processed <- sjlabelled::as_factor(raw)  # 將值標籤轉為 factor 等級
+  labels <- sjlabelled::get_label(raw)     # 取得變數標籤
+  list(data = processed, labels = labels)
+}
+```
+
+## 資料讀入
+
+```{r 資料讀入}
+library(sjlabelled)
+library(sjmisc)
+library(sjPlot)
+library(tidyverse)
+
+# 2003 年：讀入後加上 "v" 前綴，使數字開頭變數成為合法名稱
+tscs03 <- read_data("TSCS2003/tscs2003q2.sav") %>% add_v_prefix()
+
+# 2013 年：讀入後加上 "v" 前綴，使數字開頭變數成為合法名稱
+tscs13 <- read_data("TSCS2013/tscs2013q2.sav") %>% add_v_prefix()
+
+# 2023 年：2023 年欄位為字母+數字（A1, H2, B1…），不需加 v
+tscs23 <- read_data("TSCS2023/SRDA釋出檔/tscs2023q1.sav")
+```
+
+## 共同題編碼
+
+以下列出三筆資料（2003、2013、2023）共同擁有的 14 題，每題先陳述題幹與選項，再依序列出各年度編碼。
+
+### Q1. 性別
+
+**題幹與選項：** - 2003 (v1)：您的性別？ (1) 男 (2) 女 - 2013 (v1)：您的性別？ (1) 男 (2) 女 - 2023 (A1)：您的性別？ (1) 男 (2) 女
+
+```{r}
+# 2003
+frq(tscs03$v1)
+tscs03$sex <- rec(tscs03$v1, rec = "1=1; 2=0")
+tscs03$sex <- set_labels(tscs03$sex, labels = c("男性" = 1, "女性" = 0))
+tscs03$sex <- set_label(tscs03$sex, "性別")
+frq(tscs03$sex)
+
+# 2013
+frq(tscs13$v1)
+tscs13$sex <- rec(tscs13$v1, rec = "1=1; 2=0")
+tscs13$sex <- set_labels(tscs13$sex, labels = c("男性" = 1, "女性" = 0))
+tscs13$sex <- set_label(tscs13$sex, "性別")
+frq(tscs13$sex)
+
+# 2023
+frq(tscs23$a1)
+tscs23$sex <- rec(tscs23$a1, rec = "1=1; 2=0")
+tscs23$sex <- set_labels(tscs23$sex, labels = c("男性" = 1, "女性" = 0))
+tscs23$sex <- set_label(tscs23$sex, "性別")
+frq(tscs23$sex)
+# plot_frq(tscs23$sex, weight.by = tscs23$wr14)
+```
+
+### Q2. 政治世代
+
+**編碼邏輯：** 參照 Chang & Wang (2005)，依出生年份劃分世代，切點依各調查年度調整：
+
+- G1: 1931 年以前出生
+- G2: 1932–1953 年出生
+- G3: 1954–1968 年出生
+- G4: 1969–1978 年出生
+- G5: 1979–1988 年出生
+- G6: 1989–2004 年出生
+
+#### 出生年月（年齡）
+
+**題幹與選項：** - 2003 (v2a)：請問您是什麼時候出生的？民國＿＿年＿＿月 - 2013 (v2)：請問您是什麼時候出生的（以身分證上的為主）？民國＿＿年＿＿月 - 2023 (A2y)：請問您是什麼時候出生的（以身分證上的為主）？民國＿＿年＿＿月
+
+遺失值：拒絕 -8 / 不知道 -7 / 跳答 -6
+
+```{r}
+# 2003
+frq(tscs03$v2y)
+tscs03$age <- 2003 - (1911 + tscs03$v2y)
+frq(tscs03$age)
+set_label(tscs03$age) <- "年齡"
+
+# 2013
+frq(tscs13$v2y)
+tscs13$age <- 2013 - (1911 + tscs13$v2y)
+frq(tscs13$age)
+set_label(tscs13$age) <- "年齡"
+
+# 2023
+frq(tscs23$a2y)
+tscs23$age <- 2023 - (1911 + tscs23$a2y)
+frq(tscs23$age)
+set_label(tscs23$age) <- "年齡"
+
+# 剔除 110 歲以上
+tscs23 <- tscs23 %>% filter(!(age > 110))
+
+# plot_frq(tscs23$age, weight.by = tscs23$wr14,
+#          type = "histogram", normal.curve = T, normal.curve.color = "white",
+#          axis.title = "年齡", show.mean = T, show.sd = T)
+```
+
+依年齡編碼世代
+
+```{r}
+# 2003
+tscs03$generation <- NA
+tscs03$generation[tscs03$age >= (2003-1931)] <- 1
+tscs03$generation[tscs03$age >= (2003-1953) & tscs03$age <= (2003-1932)] <- 2
+tscs03$generation[tscs03$age >= (2003-1968) & tscs03$age <= (2003-1954)] <- 3
+tscs03$generation[tscs03$age >= (2003-1978) & tscs03$age <= (2003-1969)] <- 4
+tscs03$generation[tscs03$age >= (2003-1988) & tscs03$age <= (2003-1979)] <- 5
+tscs03$generation[tscs03$age >= (2003-2004) & tscs03$age <= (2003-1989)] <- 6
+set_label(tscs03$generation) <- "政治世代"
+frq(tscs03$generation)
+
+# 2013
+tscs13$generation <- NA
+tscs13$generation[tscs13$age >= (2013-1931)] <- 1
+tscs13$generation[tscs13$age >= (2013-1953) & tscs13$age <= (2013-1932)] <- 2
+tscs13$generation[tscs13$age >= (2013-1968) & tscs13$age <= (2013-1954)] <- 3
+tscs13$generation[tscs13$age >= (2013-1978) & tscs13$age <= (2013-1969)] <- 4
+tscs13$generation[tscs13$age >= (2013-1988) & tscs13$age <= (2013-1979)] <- 5
+tscs13$generation[tscs13$age >= (2013-2004) & tscs13$age <= (2013-1989)] <- 6
+set_label(tscs13$generation) <- "政治世代"
+frq(tscs13$generation)
+
+# 2023
+tscs23$generation <- NA
+tscs23$generation[tscs23$age >= (2023-1931)] <- 1
+tscs23$generation[tscs23$age >= (2023-1953) & tscs23$age <= (2023-1932)] <- 2
+tscs23$generation[tscs23$age >= (2023-1968) & tscs23$age <= (2023-1954)] <- 3
+tscs23$generation[tscs23$age >= (2023-1978) & tscs23$age <= (2023-1969)] <- 4
+tscs23$generation[tscs23$age >= (2023-1988) & tscs23$age <= (2023-1979)] <- 5
+tscs23$generation[tscs23$age >= (2023-2004) & tscs23$age <= (2023-1989)] <- 6
+set_label(tscs23$generation) <- "政治世代"
+frq(tscs23$generation)
+
+# 合併政治世代（世代1與2 合併）
+# 2003
+tscs03$gen <- rec(tscs03$generation,
+  rec = "1:2=1[世代1與2]; 3=2[世代3]; 4=3[世代4]; 5=4[世代5]; 6=5[世代6]",
+  var.label = "政治世代", as.num = F
+)
+tscs03$gen <- factor(tscs03$gen, levels = c(1,2,3,4,5),
+  labels = c("政治世代1與2", "政治世代3", "政治世代4", "政治世代5", "政治世代6"))
+frq(tscs03$gen)
+
+
+# 2013
+tscs13$gen <- rec(tscs13$generation,
+  rec = "1:2=1[世代1與2]; 3=2[世代3]; 4=3[世代4]; 5=4[世代5]; 6=5[世代6]",
+  var.label = "政治世代", , as.num = F
+)
+tscs13$gen <- factor(tscs13$gen, levels = c(1,2,3,4,5),
+  labels = c("政治世代1與2", "政治世代3", "政治世代4", "政治世代5", "政治世代6"))
+frq(tscs13$gen)
+
+# 2023
+tscs23$gen <- rec(tscs23$generation,
+  rec = "1:2=1[世代1與2]; 3=2[世代3]; 4=3[世代4]; 5=4[世代5]; 6=5[世代6]",
+  var.label = "政治世代", , as.num = F
+)
+tscs23$gen <- factor(tscs23$gen, levels = c(1,2,3,4,5),
+  labels = c("政治世代1與2", "政治世代3", "政治世代4", "政治世代5", "政治世代6"))
+frq(tscs23$gen)
+
+```
+
+### Q3. 父親族群身分
+
+**題幹與選項：**
+
+- 2003 (v4a)：請問您父親是哪裡人？ (1) 臺灣閩南人 (2) 臺灣客家人 (3) 大陸各省市 (4) 臺灣原住民 (5) 其他
+- 2013 (v8)：請問您父親是哪裡人？ (1) 臺灣閩南人 (2) 臺灣客家人 (3) 臺灣原住民 (4) 大陸各省市人 (5) 臺灣的外省人 (6) 金門、馬祖人 (7) 東南亞國家的人 (8) 其他
+- 2023 (A8)：請問您父親是哪裡人？ (1) 臺灣閩南人 (2) 臺灣客家人 (3) 大陸各省市（外省人） (4) 臺灣原住民 (5) 大陸籍 (6) 香港、澳門 (7) 東南亞籍 (8) 金門、馬祖人 (9) 其他
+
+```{r}
+# 2003 → 統一為五分類：閩南/客家/外省/原住民／其他
+frq(tscs03$v4a)
+tscs03$father_eth <- rec(tscs03$v4a,
+  rec = "1=1[閩南]; 2=2[客家]; 3=3[外省]; 4=4[原住民]; 5=5[其他]; else=NA",
+  var.label = "父親族群"
+)
+tscs03$father_eth <- factor(tscs03$father_eth, levels = c("1", "2", "3", "4", "5"),
+  labels = c("父親_閩南", "父親_客家", "父親_外省", "父親_原住民", "父親_其他"))
+frq(tscs03$father_eth)
+
+# 2013
+# 4=大陸各省市人; 5=台灣的外省人; 6=金門、馬祖人; 7=東南亞(國家)的人; 8= 其他
+frq(tscs13$v8)
+tscs13$father_eth <- rec(tscs13$v8,
+  rec = "1=1[閩南]; 2=2[客家]; 3=4[原住民]; 4,5=3[外省]; 6:8=5[其他]; 
+  else=NA",
+  var.label = "父親族群"
+)
+tscs13$father_eth <- factor(tscs13$father_eth, levels = c("1", "2", "3", "4", "5"),
+  labels = c("父親_閩南", "父親_客家", "父親_外省", "父親_原住民", "父親_其他"))
+frq(tscs13$father_eth)
+
+# 2023
+frq(tscs23$a8)
+tscs23$father_eth <- rec(tscs23$a8,
+  rec = "1=1[閩南]; 2=2[客家]; 3,5=3[外省]; 4=4[原住民]; 6:8=5[其他]; else=NA",
+  var.label = "父親族群"
+)
+tscs23$father_eth <- factor(tscs23$father_eth, levels = c("1", "2", "3", "4", "5"),
+  labels = c("父親_閩南", "父親_客家", "父親_外省", "父親_原住民", "父親_其他"))
+frq(tscs23$father_eth)
+```
+
+### Q4. 教育程度
+
+**題幹與選項：**
+
+- 2003 (v12a)：最高學歷 (1) 無/不識字 (2) 自修/識字/私塾 (3) 小學 (4) 國(初)中、初職 (5) 高中、高職 (6) 五專 (7) 二專、二技 (8) 三專 (9) 軍警(士官學校) (10) 軍警專修班 (11) 軍警(大專、官校) (12) 四技與大學 (13) 碩士 (14) 博士 (15) 其他
+- 2013 (v21)：最高學歷 (1) 無/不識字 (2) 自修/識字/私塾 (3) 小學 (4) 國(初)中 (5) 初職 (6) 高中普通科 (7) 高中職業科 (8) 高職 (9) 士官學校 (10) 五專 (11) 二專 (12) 三專 (13) 軍警校專修班 (14) 軍警校專科班 (15) 空中行專/商專 (16) 空中大學 (17) 軍警官校或大學 (18) 技術學院、科大 (19) 大學 (20) 碩士 (21) 博士 (22) 其他
+- 2023 (B1)：最高學歷（選項同 2013）
+
+```{r}
+# 簡化為研究所／大學與專科 / 高中職 / 中學以下四分類
+# 2003
+frq(tscs03$v12a)
+tscs03$edu <- rec(tscs03$v12a,
+  rec = "13:14=1[研究所]; 11:12=2[大專]; 5:10=3[高中職]; 1:4=4[中學以下]; else=NA",
+  var.label = "教育程度")
+tscs03$edu <- factor(tscs03$edu, levels = c("1", "2", "3", "4"),
+  labels = c("教育_研究所", "教育_大專", "教育_高中職", "教育_中學以下"))
+frq(tscs03$edu)
+
+# 2013
+frq(tscs13$v21)
+tscs13$edu <- rec(tscs13$v21,
+  rec = "20:21=1[研究所]; 15:19=2[大專]; 6:14=3[高中職]; 
+  1:5=4[中學以下]; else=NA",
+  var.label = "教育程度")
+tscs13$edu <- factor(tscs13$edu, levels = c("1", "2", "3", "4"),
+  labels = c("教育_研究所", "教育_大專", "教育_高中職", "教育_中學以下"))
+frq(tscs13$edu)
+
+# 2023
+frq(tscs23$b1)
+tscs23$edu <- rec(tscs23$b1,
+  rec = "20:21=1[研究所]; 15:19=2[大專]; 6:14=3[高中職]; 
+  1:5=4[中學以下]; else=NA",
+  var.label = "教育程度")
+tscs23$edu <- factor(tscs23$edu, levels = c("1", "2", "3", "4"),
+  labels = c("教育_研究所", "教育_大專", "教育_高中職", "教育_中學以下"))
+frq(tscs23$edu)
+plot_frq(tscs23$edu, weight.by = tscs23$wr14)
+```
+
+### Q5. 宗教信仰
+
+**題幹與選項：**
+
+- 2003 (v10a)：有沒有信什麼宗教？ (000) 沒有宗教信仰 (100) 天主教 (200) 基督教 (690) 回教 (790) 佛教 (901) 一般民俗信仰 (902) 道教 (903) 一貫道 (904) 軒轅教 (960) 其他
+- 2013 (v19)：目前的宗教信仰？ (1) 佛教有皈依 (2) 佛教未皈依 (3) 道教 (4) 民間信仰 (5) 一貫道 (6) 回教 (7) 天主教 (8) 基督教 (9) 沒有宗教信仰 (10) 其他
+- 2023 (A13)：目前的宗教信仰？（同 2013）
+
+```{r}
+# 2003：
+frq(tscs03$v10a)
+tscs03$religion <- rec(tscs03$v10a,
+  rec = "0=1[無信仰]; 100=2[天主教]; 200=3[基督教]; 790=4[佛教]; 901=5[民間信仰]; 902=6[道教]; 903=7[一貫道]; 690,904,960=8[其他]; else=NA",
+  var.label = "宗教信仰")
+tscs03$religion <- factor(tscs03$religion, levels = c("1", "2", "3", "4", "5", "6", "7", "8"),
+  labels = c("宗教_無信仰", "宗教_天主教", "宗教_基督教", "宗教_佛教", 
+             "宗教_民間信仰", "宗教_道教", "宗教_一貫道", "宗教_其他"))
+frq(tscs03$religion)
+
+# 2013
+frq(tscs13$v19)
+tscs13$religion <- rec(tscs13$v19,
+  rec = "1,2=4[佛教]; 3=6[道教]; 4=5[民間信仰]; 5=7[一貫道]; 6,10=8[其他]; 7=2[天主教]; 8=3[基督教]; 9=1[無信仰]; else=NA",
+  var.label = "宗教信仰")
+tscs13$religion <- factor(tscs13$religion, levels = c("1", "2", "3", "4", "5", "6", "7", "8"),
+  labels = c("宗教_無信仰", "宗教_天主教", "宗教_基督教", "宗教_佛教", 
+             "宗教_民間信仰", "宗教_道教", "宗教_一貫道", "宗教_其他"))
+frq(tscs13$religion)
+
+# 2023
+frq(tscs23$a13)
+tscs23$religion <- rec(tscs23$a13,
+  rec = "1,2=4[佛教]; 3=6[道教]; 4=5[民間信仰]; 5=7[一貫道]; 6,10=8[其他]; 7=2[天主教]; 8=3[基督教]; 9=1[無信仰]; else=NA",
+  var.label = "宗教信仰")
+tscs23$religion <- factor(tscs23$religion, levels = c("1", "2", "3", "4", "5", "6", "7", "8"),
+  labels = c("宗教_無信仰", "宗教_天主教", "宗教_基督教", "宗教_佛教", 
+             "宗教_民間信仰", "宗教_道教", "宗教_一貫道", "宗教_其他"))
+frq(tscs23$religion)
+```
+
+### Q6. 民族認同
+
+**題幹與選項：**
+
+- 2003 (v40a)：請問您認為自己是台灣人還是中國人？ (1) 臺灣人 (2) 中國人 (3) 兩者都是 (4) 兩者都不是
+- 2013 (v57)：請問您認為自己是台灣人、中國人還是兩者都是？ (1) 臺灣人 (2) 中國人 (3) 兩者都是 (4) 兩者都不是
+- 2023 (H2)：請問您認為自己是「臺灣人」、「中國人」，或者「兩者都是」？ (1) 臺灣人 (2) 中國人 (3) 兩者都是：是臺灣人也是中國人 (4) 兩者都是：是中國人也是臺灣人 (5) 都不是
+
+```{r}
+# 2003
+frq(tscs03$v40a)
+tscs03$h2r <- rec(tscs03$v40a,
+  rec = "1=1[臺灣人]; 2=2[中國人]; 3=3[兩者都是]; 4=4[兩者都不是]; else=NA",
+  var.label = "民族認同")
+tscs03$h2r <- factor(tscs03$h2r, levels = c("1", "2", "3", "4"),
+  labels = c("民族認同_臺灣人", "民族認同_中國人", "民族認同_都是", "民族認同_都不是"))
+frq(tscs03$h2r)
+
+# 2013
+frq(tscs13$v57)
+tscs13$h2r <- rec(tscs13$v57,
+  rec = "1=1[臺灣人]; 2=2[中國人]; 3=3[兩者都是]; 4=4[兩者都不是]; else=NA",
+  var.label = "民族認同")
+tscs13$h2r <- factor(tscs13$h2r, levels = c("1", "2", "3", "4"),
+  labels = c("民族認同_臺灣人", "民族認同_中國人", "民族認同_都是", "民族認同_都不是"))
+frq(tscs13$h2r)
+
+# 2023
+frq(tscs23$h2)
+tscs23$h2r <- rec(tscs23$h2,
+  rec = "1=1[臺灣人]; 2=2[中國人]; 3,4=3[兩者都是]; 5=4[兩者都不是]; else=NA",
+  var.label = "民族認同")
+tscs23$h2r <- factor(tscs23$h2r, levels = c("1", "2", "3", "4"),
+  labels = c("民族認同_臺灣人", "民族認同_中國人", "民族認同_都是", "民族認同_都不是"))
+frq(tscs23$h2r)
+```
+
+### Q7. 未來兩岸關係（統獨偏好）
+
+**題幹與選項：**
+
+- 2003 (v40e)： (1) 儘快宣布獨立 (2) 維持現狀以後走向獨立 (3) 永遠維持現狀 (4) 維持現狀以後走向統一 (5) 儘快與大陸統一
+- 2013 (v61)： (1) 儘快宣布獨立 (2) 維持現狀以後走向獨立 (3) 永遠維持現狀 (4) 維持現狀以後走向統一 (5) 儘快與中國大陸統一
+- 2023 (H3)： (1) 儘快統一 (2) 儘快獨立 (3) 維持現狀以後走向統一 (4) 維持現狀以後走向獨立 (5) 維持現狀看情形再決定 (6) 永遠維持現狀
+
+```{r}
+# 2003
+frq(tscs03$v40e)
+tscs03$h3r <- rec(tscs03$v40e,
+  rec = "1=1[儘快獨立]; 2=2[維持偏獨]; 3=3[永遠維持]; 4=4[維持偏統]; 5=5[儘快統一]; else=NA",
+  var.label = "統獨偏好", as.num = F)
+tscs03$h3r <- factor(tscs03$h3r, levels = c("1", "2", "3", "4", "5"),
+  labels = c("統獨偏好_儘快獨立", "統獨偏好_維持偏獨", "統獨偏好_永遠維持",
+             "統獨偏好_維持偏統", "統獨偏好_儘快統一"))
+frq(tscs03$h3r)
+
+# 2013
+frq(tscs13$v61)
+tscs13$h3r <- rec(tscs13$v61,
+  rec = "1=1[儘快獨立]; 2=2[維持偏獨]; 3=3[永遠維持]; 4=4[維持偏統]; 5=5[儘快統一]; else=NA",
+  var.label = "統獨偏好", as.num = F)
+tscs13$h3r <- factor(tscs13$h3r, levels = c("1", "2", "3", "4", "5"),
+  labels = c("統獨偏好_儘快獨立", "統獨偏好_維持偏獨", "統獨偏好_永遠維持",
+             "統獨偏好_維持偏統", "統獨偏好_儘快統一"))
+frq(tscs13$h3r)
+
+# 2023
+frq(tscs23$h3)
+tscs23$h3r <- rec(tscs23$h3,
+  rec = "1=5[儘快統一]; 2=1[儘快獨立]; 3=4[維持偏統]; 4=2[維持偏獨]; 5=6[維持再決定]; 6=3[永遠維持]; else=NA",
+  var.label = "統獨偏好", as.num = F)
+tscs23$h3r <- factor(tscs23$h3r, levels = c("1", "2", "3", "4", "5", "6"),
+  labels = c("統獨偏好_儘快獨立", "統獨偏好_維持偏獨", "統獨偏好_永遠維持",
+             "統獨偏好_維持偏統", "統獨偏好_儘快統一", "統獨偏好_維持再決定"))
+frq(tscs23$h3r)
+# plot_frq(tscs23$h3r, weight.by = tscs23$wr14, sort.frq = "des", axis.title = "統獨偏好")
+```
+
+### Q8. 社會文化認同（台灣文化非中國文化一部分）
+
+**題幹與選項：**
+
+- 2003 (v48d)：現在的台灣文化已經不能再說是中國文化的一部分。(1) 非常同意 (2) 同意 (3) 既不同意也不反對 (4) 不同意 (5) 非常不同意 (6) 無法決定
+- 2013 (v89c)：同上。(1) 非常同意 (2) 同意 (3) 既不同意也不反對 (4) 不同意 (5) 非常不同意
+- 2023 (d15c)：同上。(1) 非常同意 (2) 同意 (3) 既不同意也不反對 (4) 不同意 (5) 非常不同意
+
+```{r}
+# 2003：
+frq(tscs03$v48d)
+tscs03$cult_id <- rec(tscs03$v48d,
+  rec = "1,2=1[同意]; 3=2[普通]; 4,5=3[不同意]; else=NA",
+  var.label = "文化認同")
+tscs03$cult_id <- factor(tscs03$cult_id, levels = c("1", "2", "3"),
+  labels = c("文化脫中_同意", "文化脫中_普通", "文化脫中_不同意"))
+frq(tscs03$cult_id)
+
+# 2013
+frq(tscs13$v89c)
+tscs13$cult_id <- rec(tscs13$v89c,
+  rec = "1,2=1[同意]; 3=2[普通]; 4,5=3[不同意]; else=NA",
+  var.label = "文化認同")
+tscs13$cult_id <- factor(tscs13$cult_id, levels = c("1", "2", "3"),
+  labels = c("文化脫中_同意", "文化脫中_普通", "文化脫中_不同意"))
+frq(tscs13$cult_id)
+
+# 2023
+frq(tscs23$d15c)
+tscs23$cult_id <- rec(tscs23$d15c,
+  rec = "1,2=1[同意]; 3=2[普通]; 4,5=3[不同意]; else=NA",
+  var.label = "文化認同")
+tscs23$cult_id <- factor(tscs23$cult_id, levels = c("1", "2", "3"),
+  labels = c("文化脫中_同意", "文化脫中_普通", "文化脫中_不同意"))
+frq(tscs23$cult_id)
+# plot_frq(tscs23$cult_id, weight.by = tscs23$wr14)
+```
+
+### Q9. 條件式統獨：不戰而獨（安全獨立）
+
+**題幹與選項：**
+
+- 2003 (v45a)：有人認為，如果台灣獨立不會引起戰爭，就應該宣佈獨立。請問您同不同意？ (1) 非常同意 (2) 同意 (3) 不同意 (4) 非常不同意
+- 2013 (v67)：同上。(1) 非常同意 (2) 同意 (3) 不同意 (4) 非常不同意
+- 2023 (d3)：同上。(1) 非常同意 (2) 同意 (3) 不同意 (4) 非常不同意
+
+```{r}
+# 2003
+frq(tscs03$v45a)
+tscs03$cond_ind <- rec(tscs03$v45a,
+  rec = "1:2=1[同意]; 3:4=0[不同意]; else=NA",
+  var.label = "不戰而獨")
+tscs03$cond_ind <- factor(tscs03$cond_ind, levels = c("1", "0"),
+  labels = c("不戰而獨_同意", "不戰而獨_不同意"))
+frq(tscs03$cond_ind)
+
+# 2013
+frq(tscs13$v67)
+tscs13$cond_ind <- rec(tscs13$v67,
+  rec = "1:2=1[同意]; 3:4=0[不同意]; else=NA",
+  var.label = "不戰而獨")
+tscs13$cond_ind <- factor(tscs13$cond_ind, levels = c("1", "0"),
+  labels = c("不戰而獨_同意", "不戰而獨_不同意"))
+frq(tscs13$cond_ind)
+
+# 2023
+frq(tscs23$d3)
+tscs23$cond_ind <- rec(tscs23$d3,
+  rec = "1:2=1[同意]; 3:4=0[不同意]; else=NA",
+  var.label = "不戰而獨")
+tscs23$cond_ind <- factor(tscs23$cond_ind, levels = c("1", "0"),
+  labels = c("不戰而獨_同意", "不戰而獨_不同意"))
+frq(tscs23$cond_ind)
+# plot_frq(tscs23$cond_ind, weight.by = tscs23$wr14)
+```
+
+### Q10. 條件式統獨：同等發展走向統一（趨同統一）
+
+**題幹與選項：**
+
+- 2003 (v46a)：有人認為，如果大陸在經濟、社會、政治方面的發展跟台灣差不多，兩岸就應該統一。請問您同不同意？ (1) 非常同意 (2) 同意 (3) 不同意 (4) 非常不同意
+- 2013 (v69)：同上。(1) 非常同意 (2) 同意 (3) 不同意 (4) 非常不同意
+- 2023 (d4)：同上。(1) 非常同意 (2) 同意 (3) 不同意 (4) 非常不同意
+
+```{r}
+# 2003
+frq(tscs03$v46a)
+tscs03$cond_unif <- rec(tscs03$v46a,
+  rec = "1:2=1[同意]; 3:4=0[不同意]; else=NA",
+  var.label = "趨同統一")
+tscs03$cond_unif <- factor(tscs03$cond_unif, levels = c("1", "0"),
+  labels = c("趨同統一_同意", "趨同統一_不同意"))
+frq(tscs03$cond_unif)
+
+# 2013
+frq(tscs13$v69)
+tscs13$cond_unif <- rec(tscs13$v69,
+  rec = "1:2=1[同意]; 3:4=0[不同意]; else=NA",
+  var.label = "趨同統一")
+tscs13$cond_unif <- factor(tscs13$cond_unif, levels = c("1", "0"),
+  labels = c("趨同統一_同意", "趨同統一_不同意"))
+frq(tscs13$cond_unif)
+
+# 2023
+frq(tscs23$d4)
+tscs23$cond_unif <- rec(tscs23$d4,
+  rec = "1:2=1[同意]; 3:4=0[不同意]; else=NA",
+  var.label = "趨同統一")
+tscs23$cond_unif <- factor(tscs23$cond_unif, levels = c("1", "0"),
+  labels = c("趨同統一_同意", "趨同統一_不同意"))
+frq(tscs23$cond_unif)
+# plot_frq(tscs23$cond_unif, weight.by = tscs23$wr14)
+```
+
+### Q11. 政黨支持
+
+**題幹與選項：**
+
+- 2003 (v73b)：國內的政黨都有它們的支持者，請問您是哪一個政黨的支持者？ (1) 國民黨 (2) 民進黨 (3) 親民黨 (4) 台聯 (5) 新黨 (6) 建國黨 (7) 其他政黨 (8) 泛藍 (9) 泛綠 (10) 有支持政黨，不願意回答 (11) 都沒有/都支持
+- 2013 (v95)：同上。(1) 國民黨 (2) 民進黨 (3) 親民黨 (4) 台聯 (5) 新黨 (6) 建國黨 (7) 其他政黨 (8) 泛藍 (9) 泛綠 (10) 有支持政黨，不願意回答 (11) 都沒有/都支持
+- 2023 (h4)：國內的幾個政黨當中，請問您是哪一個政黨的支持者？ (1) 國民黨 (2) 民進黨 (3) 新黨 (4) 親民黨 (5) 臺聯 (6) 臺灣民眾黨 (7) 時代力量 (8) 臺灣基進 (9) 無黨籍 (10) 其他政黨 (11) 泛藍 (12) 泛綠 (13) 有支持政黨，但不回答 (14) 都沒有/都支持
+
+因要跨年比較，改用陣營重新編碼
+
+```{r}
+
+# 2003
+frq(tscs03$v73b)
+tscs03$camp <- rec(tscs03$v73b,
+  rec = "1,3,5,8=1[藍營]; 2,4,9=2[綠營]; 6,7=3[小黨]; 10,11=4[無政黨支持]; else=NA",
+  var.label = "政黨支持")
+tscs03$camp <- factor(tscs03$camp, levels = c("1", "2", "3", "4"),
+  labels = c("支持陣營_藍營", "支持陣營_綠營", "支持陣營_小黨", "支持陣營_無政黨支持"))
+frq(tscs03$camp)
+
+# 2013
+frq(tscs13$v95)
+tscs13$camp <- rec(tscs13$v95,
+  rec = "1,3,5,8=1[藍營]; 2,4,9=2[綠營]; 6,7=3[小黨]; 10,11=4[無政黨支持]; else=NA",
+  var.label = "政黨支持")
+tscs13$camp <- factor(tscs13$camp, levels = c("1", "2", "3", "4"),
+  labels = c("支持陣營_藍營", "支持陣營_綠營", "支持陣營_小黨", "支持陣營_無政黨支持"))
+frq(tscs13$camp)
+
+# 2023
+frq(tscs23$h4)
+tscs23$camp <- rec(tscs23$h4,
+  rec = "1,11=1[藍營]; 2,12=2[綠營]; 3:5,7:9=3[小黨]; 6=4[民眾黨]; 10,13,14=5[無政黨支持]; else=NA",
+  var.label = "政黨支持")
+tscs23$camp <- factor(tscs23$camp, levels = c("1", "2", "3", "4", "5"),
+  labels = c("支持陣營_藍營", "支持陣營_綠營", "支持陣營_小黨", "支持陣營_民眾黨", "支持陣營_無政黨支持"))
+frq(tscs23$camp)
+# plot_frq(tscs23$camp, weight.by = tscs23$wr14)
+
+```
+
+## 存檔
+
+共同題編碼完成後，將各資料檔存為 `.rda` 檔，存放於各自資料夾。
+
+```{r}
+save(tscs03, file = "TSCS2003/tscs03.rda")
+save(tscs13, file = "TSCS2013/tscs13.rda")
+save(tscs23, file = "TSCS2023/tscs23.rda")
+```
+
+## TSCS2003 MCA 分析
+
+```{r TSCS2003 MCA 分析}
+# 讀入存檔的資料
+load("TSCS2003/tscs03.rda")
+
+library(FactoMineR)
+library(factoextra)
+library(sjlabelled)
+library(sjPlot)
+library(tidyverse)
+
+# ── 1. 建立 MCA 圖用資料 ───────────────────────────────────────
+# 輔助變數（quali.sup）：性別、父親族群身分、宗教信仰、教育程度
+# 核心變數（active）：政治世代、民族認同、統獨偏好、社會文化認同、條件式統獨、政黨支持
+tscs03_mca <- tscs03 %>%
+  select(sex, father_eth, religion, edu, gen, h2r, h3r, cult_id,
+         cond_ind, cond_unif, camp) %>%
+  na.omit() %>%
+#  copy_labels(tscs03) %>%
+  as.data.frame()
+
+
+# ── 2. 產出 MCA 大表 ────────────────────────────────────────────
+sjPlot::view_df(tscs03_mca,
+  file = "TSCS2003_MCA大表.doc",
+  show.id = F, show.frq = T, show.prc = T
+)
+
+# ── 3. 產出 MCA 小檔 ────────────────────────────────────────────
+save(tscs03_mca, file = "TSCS2003/tscs03_mca.rda")
+
+# ── 4. 準備中英文版本 ──────────────────────────────────────────
+# 中文版：變數名改為中文標籤，levels 已為「變數標籤_選項標籤」格式
+tscs03_mca_zh <- tscs03_mca  
+
+colnames(tscs03_mca_zh) <- sapply(tscs03_mca_zh, get_label)
+
+# 英文版：完整映射 factor levels
+tscs03_mca_en <- tscs03_mca
+colnames(tscs03_mca_en) <- c("Sex", "FatherEthnicity", "Religion", 
+                             "Education", "Generation", "NatIdentity",
+                             "UnifIndepPref", "CulturIdentity", 
+                             "CondIndepend", "CondUnif", "PartySupport")
+# 完整映射 levels
+level_mapping_en <- list(
+  Sex = c("男性" = "Sex_Male", "女性" = "Sex_Female"),
+  FatherEthnicity = c("父親_閩南" = "FatherEthnicity_Hoklo",
+                 "父親_客家" = "FatherEthnicity_Hakka",
+                 "父親_外省" = "FatherEthnicity_Mainlander",
+                 "父親_原住民" = "FatherEthnicity_Indigenous",
+                 "父親_其他" = "FatherEthnicity_Other"),
+  Religion = c("宗教_無信仰" = "Religion_None",
+               "宗教_天主教" = "Religion_Catholic",
+               "宗教_基督教" = "Religion_Protestant",
+               "宗教_佛教" = "Religion_Buddhist",
+               "宗教_民間信仰" = "Religion_Folk",
+               "宗教_道教" = "Religion_Taoist",
+               "宗教_一貫道" = "Religion_Yiguandao",
+               "宗教_其他" = "Religion_Other"),
+  Education = c("教育_研究所" = "Education_Graduate",
+          "教育_大專" = "Education_College",
+          "教育_高中職" = "Education_HighSchool",
+          "教育_中學以下" = "Education_BelowHigh"),
+  Generation = c("政治世代1與2" = "Generation_Gen12",
+          "政治世代3" = "Generation_Gen3",
+          "政治世代4" = "Generation_Gen4",
+          "政治世代5" = "Generation_Gen5",
+          "政治世代6" = "Generation_Gen6"),
+  NatIdentity = c("民族認同_臺灣人" = "NatIdentity_Taiwanese",
+          "民族認同_中國人" = "NatIdentity_Chinese",
+          "民族認同_都是" = "NatIdentity_Both",
+          "民族認同_都不是" = "NatIdentity_Neither"),
+  UnifIndepPref = c("統獨偏好_儘快獨立" = "UnifIndepPref_QuickIndep",
+          "統獨偏好_維持偏獨" = "UnifIndepPref_MaintainIndep",
+          "統獨偏好_永遠維持" = "UnifIndepPref_MaintainForever",
+          "統獨偏好_維持偏統" = "UnifIndepPref_MaintainUnif",
+          "統獨偏好_儘快統一" = "UnifIndepPref_QuickUnif"),
+  CulturIdentity = c("文化脫中_同意" = "CulturIdentity_Agree",
+              "文化脫中_普通" = "CulturIdentity_Neutral",
+              "文化脫中_不同意" = "CulturIdentity_Disagree"),
+  CondIndepend = c("不戰而獨_同意" = "CondIndepend_Agree",
+               "不戰而獨_不同意" = "CondIndepend_Disagree"),
+  CondUnif = c("趨同統一_同意" = "CondUnif_Agree",
+                "趨同統一_不同意" = "CondUnif_Disagree"),
+  PartySupport = c("支持陣營_藍營" = "PartySupport_Blue",
+           "支持陣營_綠營" = "PartySupport_Green",
+           "支持陣營_小黨" = "PartySupport_Minor",
+           "支持陣營_無政黨支持" = "PartySupport_None")
+)
+for (v in names(tscs03_mca_en)) {
+  if (is.factor(tscs03_mca_en[[v]]) && v %in% names(level_mapping_en)) {
+    mapping <- level_mapping_en[[v]]
+    current_levels <- levels(tscs03_mca_en[[v]])
+    new_levels <- mapping[current_levels]
+    new_levels[is.na(new_levels)] <- current_levels[is.na(new_levels)]
+    levels(tscs03_mca_en[[v]]) <- new_levels
+  }
+}
+
+# ── 5. 執行 MCA ─────────────────────────────────────────────────
+res.MCA.2003_zh <- MCA(tscs03_mca_zh, quali.sup = c(1, 2, 3, 4), ncp = 5, graph = FALSE)
+
+res.MCA.2003_en <- MCA(tscs03_mca_en, quali.sup = c(1, 2, 3, 4), ncp = 5, graph = FALSE)
+
+# ── 6. 繪圖 ─────────────────────────────────────────────────────
+library(showtext)
+library(sysfonts)
+font_add("heiti_tc", regular = "/System/Library/Fonts/STHeiti Light.ttc")
+showtext_auto()
+
+# 陡坡圖
+fviz_screeplot(res.MCA.2003_zh, ncp = 5 
+               # title = "TSCS2003 MCA 陡坡圖"
+               )
+
+# 中文版變數關聯圖
+par(family = "heiti_tc")
+
+fviz_mca_var(
+    res.MCA.2003_zh,
+    repel = TRUE,
+    select = list(cos2 = 15),
+    col.var = "black",
+    col.quali.sup = "brown",
+    shape.var = 17,
+    label = "var",
+    geom = c("point", "text"),
+    labelsize = 8,
+    pointsize = 5,
+    title = ""
+)+
+    theme(
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+    )
+    
+
+# 英文版變數關聯圖
+par(family = "sans")
+fviz_mca_var(res.MCA.2003_en,
+  repel = TRUE,
+  select = list("cos2=30"),
+  # title = "TSCS2003 MCA Variable Association Plot (English)"
+)
+
+
+# 世代分布圖
+par(mfrow=c(1,1))
+plotellipses(res.MCA.2003_zh, keepvar = c("gen"), label="ind.sup", title="") 
+
+fviz_mca_ind(res.MCA.2003_zh, label = "none", 
+             invisible = c("var", "quali.sup", "quanti.sup"),
+             habillage = "gen", 
+             title = "", pointsize = 0.7, 
+             col.ind = "gray") 
+
+plot
+
+par(mfrow=c(1,1))
+fviz_mca_ind(res.MCA.2003_zh, label = "none", 
+                   invisible = c("var", "quali.sup", "quanti.sup"),
+                   habillage = "gen", title = "", pointsize = 0.7, 
+                   col.ind = "gray")
+
+# g1 + theme_minimal() + scale_color_brewer(palette="Paired")    
+g1 + theme_minimal() + scale_color_manual(values=c("#FFFFFF", "#000000"))
+
+
+
+# 儲存 cos2 表格
+cos2_table_2003 <- as.data.frame(round(res.MCA.2003_zh$var$cos2, 3))
+write.csv(cos2_table_2003, file = "TSCS2003_MCA_cos2_table.csv")
+```
+
+## TSCS2013 MCA 分析
+
+```{r TSCS2013 MCA 分析}
+# 讀入存檔的資料
+load("TSCS2013/tscs13.rda") 
+
+library(FactoMineR)
+library(factoextra)
+library(sjlabelled)
+library(sjPlot)
+library(tidyverse)
+
+# ── 1. 建立 MCA 圖用資料 ───────────────────────────────────────
+# 輔助變數（quali.sup）：性別、父親族群身分、宗教信仰、教育程度
+# 核心變數（active）：政治世代、民族認同、統獨偏好、社會文化認同、條件式統獨、政黨支持
+tscs13_mca <- tscs13 %>%
+  select(sex, father_eth, religion, edu, gen, h2r, h3r, cult_id, cond_ind, cond_unif, camp) %>%
+  na.omit() %>%
+  copy_labels(tscs13) %>%
+  as.data.frame()
+
+# ── 2. 產出 MCA 大表 ────────────────────────────────────────────
+sjPlot::view_df(tscs13_mca,
+  file = "TSCS2013_MCA大表.doc",
+  show.id = F, show.frq = T, show.prc = T
+)
+
+# ── 3. 產出 MCA 小檔 ────────────────────────────────────────────
+save(tscs13_mca, file = "TSCS2013/tscs13_mca.rda")
+
+# ── 4. 準備中英文版本 ──────────────────────────────────────────
+# 中文版：變數名改為中文標籤，levels 已為「變數標籤_選項標籤」格式
+tscs13_mca_zh <- tscs13_mca
+colnames(tscs13_mca_zh) <- sapply(tscs13_mca_zh, get_label)
+
+# 英文版：完整映射 factor levels
+tscs13_mca_en <- tscs13_mca
+colnames(tscs13_mca_en) <- c("Sex", "FatherEthnicity", "Religion", "Education",
+                              "Generation", "NatIdentity", "UnifIndepPref",
+                              "CulturIdentity", "CondIndepend", "CondUnif", "PartySupport")
+# 完整映射 levels
+level_mapping_en <- list(
+    Sex = c("男性" = "Sex_Male", "女性" = "Sex_Female"),
+    FatherEthnicity = c("父親_閩南" = "FatherEthnicity_Hoklo",
+                        "父親_客家" = "FatherEthnicity_Hakka",
+                        "父親_外省" = "FatherEthnicity_Mainlander",
+                        "父親_原住民" = "FatherEthnicity_Indigenous",
+                        "父親_其他" = "FatherEthnicity_Other"),
+    Religion = c("宗教_無信仰" = "Religion_None",
+                 "宗教_天主教" = "Religion_Catholic",
+                 "宗教_基督教" = "Religion_Protestant",
+                 "宗教_佛教" = "Religion_Buddhist",
+                 "宗教_民間信仰" = "Religion_Folk",
+                 "宗教_道教" = "Religion_Taoist",
+                 "宗教_一貫道" = "Religion_Yiguandao",
+                 "宗教_其他" = "Religion_Other"),
+    Education = c("教育_研究所" = "Education_Graduate",
+                  "教育_大專" = "Education_College",
+                  "教育_高中職" = "Education_HighSchool",
+                  "教育_中學以下" = "Education_BelowHigh"),
+    Generation = c("政治世代1與2" = "Generation_Gen12",
+                   "政治世代3" = "Generation_Gen3",
+                   "政治世代4" = "Generation_Gen4",
+                   "政治世代5" = "Generation_Gen5",
+                   "政治世代6" = "Generation_Gen6"),
+    NatIdentity = c("民族認同_臺灣人" = "NatIdentity_Taiwanese",
+                    "民族認同_中國人" = "NatIdentity_Chinese",
+                    "民族認同_都是" = "NatIdentity_Both",
+                    "民族認同_都不是" = "NatIdentity_Neither"),
+    UnifIndepPref = c("統獨偏好_儘快獨立" = "UnifIndepPref_QuickIndep",
+                      "統獨偏好_維持偏獨" = "UnifIndepPref_MaintainIndep",
+                      "統獨偏好_永遠維持" = "UnifIndepPref_MaintainForever",
+                      "統獨偏好_維持偏統" = "UnifIndepPref_MaintainUnif",
+                      "統獨偏好_儘快統一" = "UnifIndepPref_QuickUnif"),
+    CulturIdentity = c("文化脫中_同意" = "CulturIdentity_Agree",
+                       "文化脫中_普通" = "CulturIdentity_Neutral",
+                       "文化脫中_不同意" = "CulturIdentity_Disagree"),
+    CondIndepend = c("不戰而獨_同意" = "CondIndepend_Agree",
+                     "不戰而獨_不同意" = "CondIndepend_Disagree"),
+    CondUnif = c("趨同統一_同意" = "CondUnif_Agree",
+                 "趨同統一_不同意" = "CondUnif_Disagree"),
+    PartySupport = c("支持陣營_藍營" = "PartySupport_Blue",
+                     "支持陣營_綠營" = "PartySupport_Green",
+                     "支持陣營_小黨" = "PartySupport_Minor",
+                     "支持陣營_無政黨支持" = "PartySupport_None")
+)
+for (v in names(tscs13_mca_en)) {
+  if (is.factor(tscs13_mca_en[[v]]) && v %in% names(level_mapping_en)) {
+    mapping <- level_mapping_en[[v]]
+    current_levels <- levels(tscs13_mca_en[[v]])
+    new_levels <- mapping[current_levels]
+    new_levels[is.na(new_levels)] <- current_levels[is.na(new_levels)]
+    levels(tscs13_mca_en[[v]]) <- new_levels
+  }
+}
+
+# ── 5. 執行 MCA ─────────────────────────────────────────────────
+res.MCA.2013_zh <- MCA(tscs13_mca_zh, quali.sup = c(1, 2, 3, 4), ncp = 5, graph = FALSE)
+res.MCA.2013_en <- MCA(tscs13_mca_en, quali.sup = c(1, 2, 3, 4), ncp = 5, graph = FALSE)
+
+# ── 6. 繪圖 ─────────────────────────────────────────────────────
+library(showtext)
+library(sysfonts)
+font_add("heiti_tc", regular = "/System/Library/Fonts/STHeiti Light.ttc")
+showtext_auto()
+
+# 陡坡圖
+fviz_screeplot(res.MCA.2013_zh, ncp = 5, title = "TSCS2013 MCA 陡坡圖")
+
+# 中文版變數關聯圖
+par(family = "heiti_tc")
+fviz_mca_var(
+    res.MCA.2013_zh,
+    repel = TRUE,
+    select = list(cos2 = 15),
+    col.var = "black",
+    col.quali.sup = "brown",
+    shape.var = 17,
+    label = "var",
+    geom = c("point", "text"),
+    labelsize = 8,
+    pointsize = 5,
+    title = ""
+)+
+    theme(
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+    )
+
+# 英文版變數關聯圖
+par(family = "sans")
+fviz_mca_var(res.MCA.2013_en,
+  repel = TRUE,
+  select = "cos2 30",
+  title = "TSCS2013 MCA Variable Association Plot (English)"
+)
+
+# 儲存 cos2 表格
+cos2_table_2013 <- as.data.frame(round(res.MCA.2013_zh$var$cos2, 3))
+write.csv(cos2_table_2013, file = "TSCS2013_MCA_cos2_table.csv")
+```
+
+## TSCS2023 MCA 分析
+
+```{r TSCS2023 MCA 分析}
+# 讀入存檔的資料
+load("TSCS2023/tscs23.rda") 
+
+library(FactoMineR)
+library(factoextra)
+library(sjlabelled)
+library(sjPlot)
+library(tidyverse)
+
+# ── 1. 建立 MCA 圖用資料 ────────────────────────────────────────
+# 輔助變數（quali.sup）：性別、父親族群身分、宗教信仰、教育程度
+# 核心變數（active）：政治世代、民族認同、統獨偏好、社會文化認同、條件式統獨、政黨支持
+tscs23_mca <- tscs23 %>%
+  select(sex, father_eth, religion, edu, gen, h2r, h3r, cult_id, cond_ind, cond_unif, camp) %>%
+  na.omit() %>%
+  copy_labels(tscs23) %>%
+  as.data.frame()
+
+# ── 2. 產出 MCA 大表 ────────────────────────────────────────────
+sjPlot::view_df(tscs23_mca,
+  file = "TSCS2023_MCA大表.doc",
+  show.id = F, show.frq = T, show.prc = T
+)
+
+# ── 3. 產出 MCA 小檔 ────────────────────────────────────────────
+save(tscs23_mca, file = "TSCS2023/tscs23_mca.rda")
+
+# ── 4. 準備中英文版本 ──────────────────────────────────────────
+# 中文版：變數名改為中文標籤，levels 已為「變數標籤_選項標籤」格式
+tscs23_mca_zh <- tscs23_mca
+colnames(tscs23_mca_zh) <- sapply(tscs23_mca_zh, get_label)
+
+# 英文版：完整映射 factor levels
+tscs23_mca_en <- tscs23_mca
+colnames(tscs23_mca_en) <- c("Sex", "FatherEthnicity", "Religion", "Education",
+                              "Generation", "NatIdentity", "UnifIndepPref",
+                              "CulturIdentity", "CondIndepend", "CondUnif", "PartySupport")
+
+# 完整映射 levels
+level_mapping_en <- list(
+    Sex = c("男性" = "Sex_Male", "女性" = "Sex_Female"),
+    FatherEthnicity = c("父親_閩南" = "FatherEthnicity_Hoklo",
+                        "父親_客家" = "FatherEthnicity_Hakka",
+                        "父親_外省" = "FatherEthnicity_Mainlander",
+                        "父親_原住民" = "FatherEthnicity_Indigenous",
+                        "父親_其他" = "FatherEthnicity_Other"),
+    Religion = c("宗教_無信仰" = "Religion_None",
+                 "宗教_天主教" = "Religion_Catholic",
+                 "宗教_基督教" = "Religion_Protestant",
+                 "宗教_佛教" = "Religion_Buddhist",
+                 "宗教_民間信仰" = "Religion_Folk",
+                 "宗教_道教" = "Religion_Taoist",
+                 "宗教_一貫道" = "Religion_Yiguandao",
+                 "宗教_其他" = "Religion_Other"),
+    Education = c("教育_研究所" = "Education_Graduate",
+                  "教育_大專" = "Education_College",
+                  "教育_高中職" = "Education_HighSchool",
+                  "教育_中學以下" = "Education_BelowHigh"),
+    Generation = c("政治世代1與2" = "Generation_Gen12",
+                   "政治世代3" = "Generation_Gen3",
+                   "政治世代4" = "Generation_Gen4",
+                   "政治世代5" = "Generation_Gen5",
+                   "政治世代6" = "Generation_Gen6"),
+    NatIdentity = c("民族認同_臺灣人" = "NatIdentity_Taiwanese",
+                    "民族認同_中國人" = "NatIdentity_Chinese",
+                    "民族認同_都是" = "NatIdentity_Both",
+                    "民族認同_都不是" = "NatIdentity_Neither"),
+    UnifIndepPref = c("統獨偏好_儘快獨立" = "UnifIndepPref_QuickIndep",
+                      "統獨偏好_維持偏獨" = "UnifIndepPref_MaintainIndep",
+                      "統獨偏好_永遠維持" = "UnifIndepPref_MaintainForever",
+                      "統獨偏好_維持偏統" = "UnifIndepPref_MaintainUnif",
+                      "統獨偏好_儘快統一" = "UnifIndepPref_QuickUnif"),
+    CulturIdentity = c("文化脫中_同意" = "CulturIdentity_Agree",
+                       "文化脫中_普通" = "CulturIdentity_Neutral",
+                       "文化脫中_不同意" = "CulturIdentity_Disagree"),
+    CondIndepend = c("不戰而獨_同意" = "CondIndepend_Agree",
+                     "不戰而獨_不同意" = "CondIndepend_Disagree"),
+    CondUnif = c("趨同統一_同意" = "CondUnif_Agree",
+                 "趨同統一_不同意" = "CondUnif_Disagree"),
+    PartySupport = c("支持陣營_藍營" = "PartySupport_Blue",
+                     "支持陣營_綠營" = "PartySupport_Green",
+                     "支持陣營_小黨" = "PartySupport_Minor",
+                     "支持陣營_無政黨支持" = "PartySupport_None")
+)
+for (v in names(tscs23_mca_en)) {
+  if (is.factor(tscs23_mca_en[[v]]) && v %in% names(level_mapping_en)) {
+    mapping <- level_mapping_en[[v]]
+    current_levels <- levels(tscs23_mca_en[[v]])
+    new_levels <- mapping[current_levels]
+    new_levels[is.na(new_levels)] <- current_levels[is.na(new_levels)]
+    levels(tscs23_mca_en[[v]]) <- new_levels
+  }
+}
+
+# ── 5. 執行 MCA ─────────────────────────────────────────────────
+res.MCA.2023_zh <- MCA(tscs23_mca_zh, quali.sup = c(1, 2, 3, 4), ncp = 5, graph = FALSE)
+res.MCA.2023_en <- MCA(tscs23_mca_en, quali.sup = c(1, 2, 3, 4), ncp = 5, graph = FALSE)
+
+# ── 6. 繪圖 ─────────────────────────────────────────────────────
+library(showtext)
+library(sysfonts)
+font_add("heiti_tc", regular = "/System/Library/Fonts/STHeiti Light.ttc")
+showtext_auto()
+
+# 陡坡圖
+fviz_screeplot(res.MCA.2023_zh, ncp = 5, title = "TSCS2023 MCA 陡坡圖")
+
+# 中文版變數關聯圖
+par(family = "heiti_tc")
+fviz_mca_var(
+    res.MCA.2023_zh,
+    repel = TRUE,
+    select = list(cos2 = 20),
+    col.var = "black",
+    col.quali.sup = "brown",
+    shape.var = 17,
+    label = "var",
+    geom = c("point", "text"),
+    labelsize = 8,
+    pointsize = 5,
+    title = ""
+)+
+    theme(
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)
+    )
+
+# 英文版變數關聯圖
+par(family = "sans")
+fviz_mca_var(res.MCA.2023_en,
+  repel = TRUE,
+  select = "cos2 30",
+  title = "TSCS2023 MCA Variable Association Plot (English)"
+)
+
+# 儲存 cos2 表格
+cos2_table_2023 <- as.data.frame(round(res.MCA.2023_zh$var$cos2, 3))
+write.csv(cos2_table_2023, file = "TSCS2023_MCA_cos2_table.csv")
+```
